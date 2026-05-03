@@ -29,22 +29,27 @@ print('vllm:', vllm.__version__)
 PYEOF
 
 cat > /tmp/t2_single.py <<'PYEOF'
-from vllm import LLM, SamplingParams
-llm = LLM(model='facebook/opt-125m', max_model_len=256,
-          gpu_memory_utilization=0.3, enforce_eager=True)
-out = llm.generate(['Hello, world. The capital of France is'],
-                   SamplingParams(max_tokens=8, temperature=0))
-print('SINGLE_GPU_OK:', repr(out[0].outputs[0].text))
+# `if __name__ == '__main__'` is required: vLLM forces spawn start method on
+# WSL (NVML is not fork-safe), so without the guard each spawned worker
+# re-imports the script and tries to construct another LLM, recursively.
+if __name__ == '__main__':
+    from vllm import LLM, SamplingParams
+    llm = LLM(model='facebook/opt-125m', max_model_len=256,
+              gpu_memory_utilization=0.3, enforce_eager=True)
+    out = llm.generate(['Hello, world. The capital of France is'],
+                       SamplingParams(max_tokens=8, temperature=0))
+    print('SINGLE_GPU_OK:', repr(out[0].outputs[0].text))
 PYEOF
 
 cat > /tmp/t3_tp2.py <<'PYEOF'
-from vllm import LLM, SamplingParams
-llm = LLM(model='facebook/opt-125m', max_model_len=256,
-          gpu_memory_utilization=0.3, enforce_eager=True,
-          tensor_parallel_size=2)
-out = llm.generate(['Hello, world. The capital of France is'],
-                   SamplingParams(max_tokens=8, temperature=0))
-print('TP2_OK:', repr(out[0].outputs[0].text))
+if __name__ == '__main__':
+    from vllm import LLM, SamplingParams
+    llm = LLM(model='facebook/opt-125m', max_model_len=256,
+              gpu_memory_utilization=0.3, enforce_eager=True,
+              tensor_parallel_size=2)
+    out = llm.generate(['Hello, world. The capital of France is'],
+                       SamplingParams(max_tokens=8, temperature=0))
+    print('TP2_OK:', repr(out[0].outputs[0].text))
 PYEOF
 
 echo '======== T1: ENV CHECK ========'
