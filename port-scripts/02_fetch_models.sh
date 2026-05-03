@@ -16,11 +16,17 @@ PY=.venv/bin/python
 
 mkdir -p "$HOME/models"
 
-# Make sure huggingface_hub is installed in the venv
-if ! "$PY" -c "import huggingface_hub" 2>/dev/null; then
-    echo "Installing huggingface_hub..."
-    uv pip install -q huggingface_hub
+# Make sure huggingface_hub + hf_transfer are installed.
+# hf_transfer is a Rust-based downloader that handles stalls and slow
+# connections much more gracefully than the default urllib3 path.
+if ! "$PY" -c "import huggingface_hub, hf_transfer" 2>/dev/null; then
+    echo "Installing huggingface_hub + hf_transfer..."
+    uv pip install -q huggingface_hub hf_transfer
 fi
+
+# Enable hf_transfer for this session. Must be set BEFORE huggingface_hub
+# import to take effect.
+export HF_HUB_ENABLE_HF_TRANSFER=1
 
 cat > /tmp/fetch_models.py <<'PYEOF'
 import os
@@ -43,10 +49,14 @@ for repo, target, size in models:
         continue
     print(f"DOWNLOAD: {repo} ({size}) -> {target}")
     os.makedirs(target, exist_ok=True)
+    # max_workers=4 (down from 8) — fewer parallel connections is less
+    # prone to worker-level stalls on WSL2 / behind-NAT setups.
+    # hf_transfer handles per-file range requests internally, so we don't
+    # lose much throughput by capping outer parallelism.
     snapshot_download(
         repo_id=repo,
         local_dir=target,
-        max_workers=8,
+        max_workers=4,
     )
     print(f"OK: {repo}")
 print("All models present.")
